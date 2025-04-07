@@ -1,4 +1,12 @@
-__pycache__
+# Python
+__pycache__/
+*.pyc
+.venv/
 .env
-data/
-.venv
+
+# Vite / Node
+frontend/node_modules/
+frontend/dist/
+
+# System
+.DS_Store
