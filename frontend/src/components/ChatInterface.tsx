@@ -7,7 +7,7 @@ export default function ChatInterface() {
   const [task, setTask] = useState("")
   const [response, setResponse] = useState("")
   const [loading, setLoading] = useState(false)
-
+  const API_BASE = "http://localhost:5000"
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!task.trim()) return
@@ -16,7 +16,7 @@ export default function ChatInterface() {
     setResponse("")
 
     try {
-      const res = await fetch("/api/ask-supervisor", {
+      const res = await fetch(`${API_BASE}/api/ask-supervisor`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ task }),

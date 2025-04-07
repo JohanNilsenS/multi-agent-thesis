@@ -3,6 +3,8 @@
 from src.model.base_agent import BaseAgent
 from src.model.llm_client import LLMClient
 from src.model.tools.internet_search import search_duckduckgo
+from src.model.utils.mongo_client import find_research, save_research
+
 
 class ResearchAgent(BaseAgent):
     def __init__(self, database: dict, llm_client: LLMClient):
@@ -37,10 +39,10 @@ class ResearchAgent(BaseAgent):
         return {"source": "internet", "content": summary}
 
     def search_database(self, query: str) -> str:
-        return self.database.get(query, "")
+        return find_research(query, max_age_days=7)
 
     def is_enough_info(self, result: str) -> bool:
         return bool(result and len(result.strip()) > 50)
 
     def save_to_database(self, query: str, result: str):
-        self.database[query] = result
+        save_research(query, result)

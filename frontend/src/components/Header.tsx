@@ -9,6 +9,7 @@ export default function Header() {
         <ul className="nav-links">
           <li><Link to="/">About</Link></li>
           <li><Link to="/chat">Demonstration</Link></li>
+          <li><Link to="/knowledge">Knowledge Center</Link></li>
         </ul>
       </nav>
     </header>
