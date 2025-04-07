@@ -4,8 +4,8 @@ from src.model.supervisor import SupervisorAgent
 from src.model.tools.internet_search import search_duckduckgo
 
 test_research = False
-test_git = False
-internet_search = True
+test_git = True
+internet_search = False
 def main():
     supervisor = SupervisorAgent()
 
