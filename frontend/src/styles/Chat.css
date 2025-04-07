@@ -1,0 +1,21 @@
+/* src/styles/Chat.css */
+
+.chat-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: calc(100vh - 100px); /* leaves space for header/footer */
+    padding: 2rem;
+  }
+  
+  .terminal {
+    width: 100%;
+    max-width: 800px;
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    border-radius: 10px;
+    padding: 2rem;
+    font-family: "Courier New", Courier, monospace;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  }
+  
