@@ -1,0 +1,28 @@
+/* src/styles/About.css */
+
+.about-container {
+    background-color: #dddddd; /* slightly darker than body */
+    padding: 2rem;
+    margin: 2rem auto;
+    max-width: 800px;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+  
+  .about-container h1 {
+    margin-top: 0;
+    font-size: 1.75rem;
+  }
+  
+  .about-container a {
+    color: #007acc;
+    font-weight: bold;
+    text-decoration: none;
+  }
+  
+  .about-container a:hover {
+    text-decoration: underline;
+  }
+  
