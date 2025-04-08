@@ -1,28 +1,29 @@
-import os
-import requests
+from transformers import AutoTokenizer, AutoModel
+import torch
+
+# Load once
+tokenizer = AutoTokenizer.from_pretrained("KBLab/bert-base-swedish-cased")
+model = AutoModel.from_pretrained("KBLab/bert-base-swedish-cased")
 
 def get_embedding_from_llm(text: str) -> list[float]:
-    EMBEDDING_API = os.getenv("EMBEDDING_API_URL")
-    API_KEY = os.getenv("EMBEDDING_API_KEY")  # if needed
+    inputs = tokenizer(
+    text,
+    return_tensors="pt",
+    truncation=True,
+    padding=True,
+    max_length=512
+)
 
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {API_KEY}"
-    }
+    with torch.no_grad():
+        outputs = model(**inputs)
 
-    payload = {
-        "input": text,
-        "model": "embedding"  # Replace with your model name if needed
-    }
+    # Mean pooling
+    token_embeddings = outputs.last_hidden_state.squeeze(0)
+    attention_mask = inputs["attention_mask"].squeeze(0)
+    mask = attention_mask.unsqueeze(-1).expand(token_embeddings.size())
+    masked_embeddings = token_embeddings * mask
+    summed = torch.sum(masked_embeddings, dim=0)
+    count = torch.clamp(mask.sum(dim=0), min=1e-9)
+    mean_pooled = summed / count
 
-    try:
-        response = requests.post(EMBEDDING_API, json=payload, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-
-        # This might change depending on the API format
-        return data["data"][0]["embedding"]
-
-    except Exception as e:
-        print(f"[Embedding Error] {e}")
-        return []
+    return mean_pooled.tolist()
