@@ -1,52 +1,174 @@
-import { useEffect, useState } from "react"
-import "../styles/KnowledgeCenter.css"
-import KnowledgeItem from "../components/KnowledgeItem"
+import React, { useState } from 'react';
+import "../styles/KnowledgeCenter.css";
+import KnowledgeGroup from "../components/KnowledgeGroup";
 
-interface KnowledgeEntry {
-  query: string
-  content: string
-  updated_at: string
+interface GroupedKnowledge {
+    partition_id: string;
+    query: string;
+    updated_at: string;
+    chunks: Chunk[];
 }
 
-export default function KnowledgeCenter() {
-  const [entries, setEntries] = useState<KnowledgeEntry[]>([])
-  const [search, setSearch] = useState("")
-
-  useEffect(() => {
-    fetch("http://localhost:5000/api/knowledge")
-      .then(res => res.json())
-      .then(data => setEntries(data))
-  }, [])
-
-  const filtered = entries.filter(e =>
-    e.query.toLowerCase().includes(search.toLowerCase())
-  )
-
-  return (
-    <div className="knowledge-container">
-      <h2>Knowledge Center</h2>
-      <p>This is a list of research entries currently stored in the database:</p>
-      <input
-        type="text"
-        placeholder="Search entries..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        style={{
-          padding: "0.5rem",
-          marginBottom: "1rem",
-          width: "100%",
-          fontSize: "1rem",
-          border: "1px solid #ccc",
-          borderRadius: "4px"
-        }}
-      />
-      <div className="knowledge-list">
-        {filtered.map((entry, i) => (
-          <KnowledgeItem key={i} entry={entry} onDelete={() =>
-            setEntries(prev => prev.filter(e => e.query !== entry.query))
-          } />
-        ))}
-      </div>
-    </div>
-  )
+interface Chunk {
+    chunk_index: number;
+    content: string;
 }
+
+interface UploadStatus {
+    isUploading: boolean;
+    success?: string;
+    error?: string;
+}
+
+const KnowledgeCenter: React.FC = () => {
+    const [knowledgeList, setKnowledgeList] = useState<GroupedKnowledge[]>([]);
+    const [uploadStatus, setUploadStatus] = useState<UploadStatus>({
+        isUploading: false
+    });
+
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!file.name.endsWith('.txt')) {
+            setUploadStatus({
+                isUploading: false,
+                error: 'Endast .txt filer stöds'
+            });
+            return;
+        }
+
+        setUploadStatus({ isUploading: true });
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch('http://localhost:5000/api/upload-document', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Ett fel uppstod vid uppladdning');
+            }
+
+            setUploadStatus({
+                isUploading: false,
+                success: `${file.name} har laddats upp och bearbetats framgångsrikt`
+            });
+
+            // Uppdatera listan med dokument
+            fetchKnowledge();
+
+        } catch (error: any) {
+            setUploadStatus({
+                isUploading: false,
+                error: `Fel vid uppladdning: ${error.message}`
+            });
+        }
+    };
+
+    const fetchKnowledge = async () => {
+        try {
+            const response = await fetch('http://localhost:5000/api/knowledge');
+            const data = await response.json();
+            setKnowledgeList(data);
+        } catch (error) {
+            console.error('Fel vid hämtning av kunskap:', error);
+        }
+    };
+
+    const handleDelete = async (query: string, partition_id: string) => {
+        try {
+            const response = await fetch(`http://localhost:5000/api/knowledge/${encodeURIComponent(query)}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                throw new Error('Kunde inte ta bort dokumentet');
+            }
+
+            setKnowledgeList(prev => prev.filter(g => g.partition_id !== partition_id));
+        } catch (error) {
+            console.error('Fel vid borttagning:', error);
+        }
+    };
+
+    const handleUpdate = async (query: string, newContent: string) => {
+        try {
+            const response = await fetch(`http://localhost:5000/api/knowledge/${encodeURIComponent(query)}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ content: newContent })
+            });
+
+            if (!response.ok) {
+                throw new Error('Kunde inte uppdatera dokumentet');
+            }
+
+            // Uppdatera listan för att visa de senaste ändringarna
+            fetchKnowledge();
+        } catch (error) {
+            console.error('Fel vid uppdatering:', error);
+        }
+    };
+
+    React.useEffect(() => {
+        fetchKnowledge();
+    }, []);
+
+    return (
+        <div className="knowledge-container">
+            <h2>Knowledge Center</h2>
+            
+            {/* Enkel filuppladdning */}
+            <div className="upload-section">
+                <input
+                    type="file"
+                    accept=".txt"
+                    onChange={handleFileUpload}
+                    style={{ marginBottom: '1rem' }}
+                />
+                
+                {/* Status och felmeddelanden */}
+                {uploadStatus.isUploading && (
+                    <div className="status-message">
+                        Laddar upp och bearbetar fil...
+                    </div>
+                )}
+                {uploadStatus.success && (
+                    <div className="success-message">
+                        {uploadStatus.success}
+                        <button onClick={() => setUploadStatus({ isUploading: false })}>×</button>
+                    </div>
+                )}
+                {uploadStatus.error && (
+                    <div className="error-message">
+                        {uploadStatus.error}
+                        <button onClick={() => setUploadStatus({ isUploading: false })}>×</button>
+                    </div>
+                )}
+            </div>
+
+            {/* Lista över uppladdade dokument */}
+            <h3>Uppladdade dokument</h3>
+            <div className="knowledge-list">
+                {knowledgeList.map((group) => (
+                    <KnowledgeGroup
+                        key={group.partition_id}
+                        group={group}
+                        onDelete={handleDelete}
+                        onUpdate={handleUpdate}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+};
+
+export default KnowledgeCenter;

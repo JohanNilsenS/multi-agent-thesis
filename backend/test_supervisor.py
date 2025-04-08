@@ -1,13 +1,14 @@
 # test_supervisor.py
-
 from src.model.supervisor import SupervisorAgent
 from src.model.tools.internet_search import search_duckduckgo
 
-test_research = False
-test_git = False
+test_research = True
+test_git = True
 internet_search = True
 def main():
     supervisor = SupervisorAgent()
+    import os
+    os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
     # After creating the supervisor and running a task
     git_agent = next(agent for agent in supervisor.agents if agent.name == "GitAgent")
