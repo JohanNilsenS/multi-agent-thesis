@@ -27,21 +27,23 @@ class LLMClient:
         self,
         api_key: Optional[str] = None,
         model_name: str = "gpt-3.5-turbo",
-        base_url: str = "https://api.openai.com/v1"
+        base_url: Optional[str] = None
     ):
         """Initierar en ny LLM-klient.
         
         Args:
             api_key (str, optional): API-nyckeln. Om None, hämtas från miljövariabeln.
             model_name (str, optional): Namnet på språkmodellen. Default är "gpt-3.5-turbo".
-            base_url (str, optional): Bas-URL:en för API:et. Default är OpenAI:s URL.
+            base_url (str, optional): Bas-URL:en för API:et. Om None, hämtas från miljövariabeln.
         """
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.api_key = api_key or os.getenv("LLM_API_KEY")
         self.model_name = model_name
-        self.base_url = base_url
+        self.base_url = base_url or os.getenv("LLM_ENDPOINT")
         
         if not self.api_key:
-            raise ValueError("API-nyckel krävs. Ange den direkt eller via OPENAI_API_KEY.")
+            raise ValueError("API-nyckel krävs. Ange den direkt eller via LLM_API_KEY.")
+        if not self.base_url:
+            raise ValueError("LLM endpoint krävs. Ange den direkt eller via LLM_ENDPOINT.")
 
     async def query(
         self,
@@ -77,7 +79,7 @@ class LLMClient:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{self.base_url}/chat/completions",
+                    self.base_url,
                     headers=headers,
                     json=payload
                 ) as response:
