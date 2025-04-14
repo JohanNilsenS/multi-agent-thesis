@@ -1,13 +1,17 @@
+"""
+Source package for backend functionality
+"""
 import os
 from flask import Flask, send_from_directory
 from flask_cors import CORS
+from .routes import status, supervisorroute, knowledge
+
 def create_app():
     app = Flask(__name__)
 
     CORS(app)
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
     # Register your API routes
-    from .routes import status, supervisorroute, knowledge
     app.register_blueprint(status.bp)
     app.register_blueprint(supervisorroute.bp)
     app.register_blueprint(knowledge.bp)
