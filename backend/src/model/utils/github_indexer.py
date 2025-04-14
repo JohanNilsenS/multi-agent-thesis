@@ -4,6 +4,10 @@ import aiohttp
 import asyncio
 from typing import Dict, List
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Ladda miljövariabler från .env-filen
+load_dotenv()
 
 class GitHubIndexer:
     def __init__(self, token: str, owner: str, repo: str):
