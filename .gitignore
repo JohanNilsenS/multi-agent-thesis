@@ -10,3 +10,5 @@ frontend/dist/
 
 # System
 .DS_Store
+backend/.file_index_cache.json
+backend/.github_index_cache.json
