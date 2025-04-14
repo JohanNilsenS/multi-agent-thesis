@@ -87,41 +87,33 @@ class ResearchAgent(BaseAgent):
                             "distance": group["max_similarity"]
                         })
                     
-                    if contents:
-                        # Första steget: Identifiera relevant information
-                        identification_prompt = (
-                            f"Du har fått följande innehåll från olika källor. "
-                            f"Baserat på frågan '{query}', välj ut och markera det mest relevanta innehållet.\n\n"
-                            f"Källor:\n"
+                    # Använd LLM för att validera relevans
+                    validation_prompt = (
+                        f"Analysera följande information i förhållande till frågan '{query}':\n\n"
+                        f"{contents[0]['content']}\n\n"
+                        "Är denna information relevant och tillräckligt detaljerad för att besvara frågan? "
+                        "Svara endast med JA eller NEJ."
+                    )
+                    validation = self.llm.query(validation_prompt).strip().lower()
+                    
+                    if "ja" in validation:
+                        # Andra steget: Förfina och anpassa svaret
+                        refinement_prompt = (
+                            f"Baserat på följande information, besvara frågan '{query}':\n\n"
+                            f"{contents[0]['content']}\n\n"
+                            "Ge ett informativt och välstrukturerat svar som innehåller:\n"
+                            "1. En kort sammanfattning av svaret\n"
+                            "2. De viktigaste punkterna eller fakta\n"
+                            "3. Eventuella viktiga detaljer eller kontext\n\n"
+                            "Undvik onödig artighet eller utfyllnad. Om informationen är osäker, nämn det tydligt."
                         )
-                        for i, content in enumerate(contents, 1):
-                            identification_prompt += (
-                                f"{i}. Query: {content['query']}\n"
-                                f"Content: {content['content']}\n"
-                                f"Similarity: {content['distance']}\n\n"
-                            )
                         
-                        identification_prompt += (
-                            f"\nVälj den mest relevanta informationen för frågan '{query}'. "
-                            f"Om ingen av källorna innehåller relevant information, svara 'NO_RELEVANT_INFO'."
-                        )
-                        
-                        relevant_info = self.llm.query(identification_prompt)
-                        
-                        if "NO_RELEVANT_INFO" not in relevant_info:
-                            # Andra steget: Förfina och anpassa svaret
-                            refinement_prompt = (
-                                f"Besvara frågan '{query}' baserat på följande information:\n{relevant_info}\n\n"
-                                f"Ge ett kort och koncist svar. Undvik onödig artighet eller utfyllnad. "
-                                f"Om informationen är osäker, nämn det kortfattat."
-                            )
-                            
-                            refined_answer = self.llm.query(refinement_prompt)
-                            return {
-                                "source": "semantic search",
-                                "content": refined_answer,
-                                "confidence": sorted_groups[0][1]["max_similarity"]
-                            }
+                        refined_answer = self.llm.query(refinement_prompt)
+                        return {
+                            "source": "semantic search",
+                            "content": refined_answer,
+                            "confidence": sorted_groups[0][1]["max_similarity"]
+                        }
 
             self.log("No relevant cached results found, performing internet search.")
 
@@ -134,18 +126,29 @@ class ResearchAgent(BaseAgent):
         # Använd samma typ av förfining för internetsökningar
         initial_prompt = (
             f"Sammanfatta följande sökresultat för att besvara frågan: '{query}'\n\n{combined_snippets}\n\n"
-            f"Ge en kort och koncis sammanfattning."
+            f"Identifiera de viktigaste punkterna och relevanta detaljer."
         )
         initial_summary = self.llm.query(initial_prompt)
         
         refinement_prompt = (
-            f"Besvara frågan '{query}' baserat på följande information:\n{initial_summary}\n\n"
-            f"Ge ett kort och koncist svar. Undvik onödig artighet eller utfyllnad. "
-            f"Om informationen är osäker, nämn det kortfattat."
+            f"Baserat på följande information, besvara frågan '{query}':\n\n"
+            f"{initial_summary}\n\n"
+            "Ge ett informativt och välstrukturerat svar som innehåller:\n"
+            "1. En kort sammanfattning av svaret\n"
+            "2. De viktigaste punkterna eller fakta\n"
+            "3. Eventuella viktiga detaljer eller kontext\n\n"
+            "Undvik onödig artighet eller utfyllnad. Om informationen är osäker, nämn det tydligt."
         )
         
         refined_answer = self.llm.query(refinement_prompt)
-        self.save_to_database(query, refined_answer)
+        
+        # Kontrollera om svaret redan finns i databasen innan vi sparar
+        existing_embedding = get_embedding_from_llm(refined_answer)
+        similar_existing = vector_store.search(existing_embedding, top_k=1, threshold=0.95)
+        
+        if not similar_existing:  # Spara bara om det inte finns något liknande
+            self.save_to_database(query, refined_answer)
+        
         return {"source": "internet", "content": refined_answer}
 
     def search_database(self, query: str) -> str:
