@@ -1,42 +1,94 @@
 # src/model/llm_client.py
 
+"""LLMClient hanterar kommunikationen med språkmodellen.
+
+Denna modul tillhandahåller funktionalitet för att skicka frågor till och
+ta emot svar från en språkmodell via API.
+"""
+
 import os
 import aiohttp
-from typing import Optional
+import json
+from typing import Optional, Dict, Any
 
 class LLMClient:
-    def __init__(self):
-        self.base_url = os.getenv("LLM_ENDPOINT")
-        self.api_key = os.getenv("LLM_API_KEY")
-        self.headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
+    """En klient för att kommunicera med en språkmodell.
+    
+    Denna klass hanterar all kommunikation med språkmodellen via API,
+    inklusive autentisering, frågeformatering och felhantering.
+    
+    Attribut:
+        api_key (str): API-nyckeln för autentisering
+        model_name (str): Namnet på språkmodellen att använda
+        base_url (str): Bas-URL:en för API:et
+    """
+    
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model_name: str = "gpt-3.5-turbo",
+        base_url: str = "https://api.openai.com/v1"
+    ):
+        """Initierar en ny LLM-klient.
+        
+        Args:
+            api_key (str, optional): API-nyckeln. Om None, hämtas från miljövariabeln.
+            model_name (str, optional): Namnet på språkmodellen. Default är "gpt-3.5-turbo".
+            base_url (str, optional): Bas-URL:en för API:et. Default är OpenAI:s URL.
+        """
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.model_name = model_name
+        self.base_url = base_url
+        
+        if not self.api_key:
+            raise ValueError("API-nyckel krävs. Ange den direkt eller via OPENAI_API_KEY.")
+
+    async def query(
+        self,
+        prompt: str,
+        max_tokens: int = 1000,
+        temperature: float = 0.7
+    ) -> str:
+        """Skickar en fråga till språkmodellen och returnerar svaret.
+        
+        Args:
+            prompt (str): Frågan att skicka till modellen
+            max_tokens (int, optional): Maximalt antal tokens i svaret. Default är 1000.
+            temperature (float, optional): Kreativitetsnivå (0-1). Default är 0.7.
+            
+        Returns:
+            str: Modellens svar på frågan
+            
+        Raises:
+            Exception: Om något går fel vid API-anropet
+        """
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
         }
-        self.debug = True
-
-    def log(self, message: str):
-        if self.debug:
-            print(f"[LLMClient][DEBUG] {message}")
-
-    async def query(self, prompt: str) -> str:
-        """Skickar en fråga till LLM och returnerar svaret."""
-        self.log("Sending query to LLM...")
+        
         payload = {
-            "messages": [
-                {"role": "system", "content": "Du är en hjälpsam AI-assistent som svarar på svenska."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 2000
+            "model": self.model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+            "temperature": temperature
         }
         
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(self.base_url, json=payload, headers=self.headers) as response:
-                    response.raise_for_status()
-                    data = await response.json()
-                    self.log("Received response from LLM")
-                    return data["choices"][0]["message"]["content"]
+                async with session.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=headers,
+                    json=payload
+                ) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise Exception(
+                            f"API-anrop misslyckades med status {response.status}: {error_text}"
+                        )
+                    
+                    response_data = await response.json()
+                    return response_data["choices"][0]["message"]["content"]
+                    
         except Exception as e:
-            self.log(f"Error in LLM query: {str(e)}")
-            return f"Ett fel uppstod vid kommunikation med LLM: {str(e)}"
+            raise Exception(f"Fel vid kommunikation med språkmodellen: {str(e)}")
