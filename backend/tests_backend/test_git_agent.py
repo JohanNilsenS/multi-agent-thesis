@@ -4,6 +4,11 @@ import asyncio
 from src.model.agents.git_agent import GitAgent
 from src.model.supervisor import SupervisorAgent
 from src.model.llm_client import LLMClient
+import pytest
+from dotenv import load_dotenv
+
+# Ladda miljövariabler
+load_dotenv()
 
 class TestGitAgent(unittest.TestCase):
     def setUp(self):
@@ -44,24 +49,6 @@ class TestGitAgent(unittest.TestCase):
             self.assertGreater(len(self.agent.file_index), 0)
         self.run_async_test(test())
 
-    def test_get_relevant_files(self):
-        """Testar att hitta relevanta filer."""
-        async def test():
-            await self.agent.initialize()
-            relevant_files = self.agent._get_relevant_files("app.py")
-            self.assertIsInstance(relevant_files, str)
-            self.assertGreater(len(relevant_files), 0)
-        self.run_async_test(test())
-
-    def test_find_and_explain_file(self):
-        """Testar att hitta och förklara en specifik fil."""
-        async def test():
-            await self.agent.initialize()
-            response = await self.agent.find_and_explain_file("visa filen app.py")
-            self.assertIsInstance(response, str)
-            self.assertGreater(len(response), 0)
-        self.run_async_test(test())
-
     def test_analyze_code(self):
         """Testar kodanalys."""
         async def test():
@@ -79,6 +66,85 @@ class TestGitAgent(unittest.TestCase):
             self.agent.file_index = await self.agent.github_indexer.index_repo(force_refresh=True)
             self.assertGreaterEqual(len(self.agent.file_index), initial_count)
         self.run_async_test(test())
+
+@pytest.fixture
+def git_agent():
+    """Skapa en GitAgent-instans för tester."""
+    llm_client = LLMClient()
+    agent = GitAgent(llm_client)
+    return agent
+
+def test_can_handle(git_agent):
+    """Testa om agenten kan hantera git-relaterade uppgifter."""
+    # Testa olika git-relaterade uppgifter
+    assert git_agent.can_handle("git: explain app.py")
+    assert git_agent.can_handle("git: review PR #3")
+    assert git_agent.can_handle("git: analyze commit abc123")
+    assert git_agent.can_handle("visa filen app.py")
+    assert git_agent.can_handle("förklara koden i app.py")
+    assert git_agent.can_handle("pull request #3")
+    
+    # Testa icke-git-relaterade uppgifter
+    assert not git_agent.can_handle("hej världen")
+    assert not git_agent.can_handle("vad är klockan?")
+
+@pytest.mark.asyncio
+async def test_explain_file(git_agent):
+    """Testa filförklaring."""
+    # Testa med en giltig fil
+    result = await git_agent.explain_file("app.py")
+    assert isinstance(result, str)
+    assert len(result) > 0
+    
+    # Testa med en ogiltig fil
+    result = await git_agent.explain_file("nonexistent_file.py")
+    assert "kunde inte hitta" in result.lower()
+
+@pytest.mark.asyncio
+async def test_review_pull_request(git_agent):
+    """Testa PR-granskning."""
+    # Testa med ett giltigt PR-nummer
+    result = await git_agent.review_pull_request("PR #3")
+    assert isinstance(result, str)
+    assert len(result) > 0
+    
+    # Testa med ett ogiltigt PR-nummer
+    result = await git_agent.review_pull_request("PR #999999")
+    assert "kunde inte hämta pull request #999999" in result.lower()
+
+@pytest.mark.asyncio
+async def test_analyze_commit(git_agent):
+    """Testa commit-analys."""
+    result = await git_agent.analyze_commit("98fc5b6")
+    assert isinstance(result, str)
+    assert len(result) > 0
+    assert "commit" in result.lower() or "ändring" in result.lower()
+
+@pytest.mark.asyncio
+async def test_handle(git_agent):
+    """Testa den allmänna hanteringen av uppgifter."""
+    # Testa olika typer av uppgifter
+    result = await git_agent.handle("git: explain app.py")
+    assert isinstance(result, str)
+    assert len(result) > 0
+    
+    result = await git_agent.handle("git: review PR #3")
+    assert isinstance(result, str)
+    assert len(result) > 0
+    
+    result = await git_agent.handle("git: analyze commit 98fc5b6")
+    assert isinstance(result, str)
+    assert len(result) > 0
+    
+    # Testa ogiltig uppgift
+    result = await git_agent.handle("git: invalid command")
+    assert "kunde inte hantera" in result.lower()
+
+def test_github_token():
+    """Testa att GitHub-token finns."""
+    token = os.getenv("GITHUB_AGENT_TOKEN")
+    assert token is not None, "GITHUB_AGENT_TOKEN saknas i .env-filen"
+    assert len(token) > 0, "GITHUB_AGENT_TOKEN är tom"
 
 if __name__ == '__main__':
     unittest.main() 
