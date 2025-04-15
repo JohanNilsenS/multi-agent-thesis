@@ -78,17 +78,58 @@ class GitAgent(BaseAgent):
             task = task[4:].strip()
             self.logger.debug(f"Removed git: prefix. New task: {task}")
 
+        # Kontrollera om kommandot är tomt
+        if not task:
+            return "Kunde inte hantera git-kommandot. Ange ett kommando."
+
+        # Hantera olika typer av kommandon
         if "pull request" in task.lower() or "pr" in task.lower():
+            # Kontrollera om PR-nummer saknas
+            if "#" not in task and "pr" not in task.lower():
+                return "Kunde inte hantera git-kommandot. Ange PR-nummer som 'git: review PR #3'"
             return await self.review_pull_request(task)
-        elif "explain" in task.lower() or "förklara" in task.lower() or "visa filen" in task.lower():
+        elif any(keyword in task.lower() for keyword in ["explain", "förklara", "visa filen", "visa koden", "förklara koden"]):
             # Extrahera filnamnet från uppgiften
-            filename = task.replace("explain", "").replace("förklara", "").replace("visa filen", "").strip()
+            words = task.lower().split()
+            
+            # Kontrollera om kommandot saknar filnamn
+            if len(words) == 1 and any(keyword in words[0] for keyword in ["explain", "förklara", "visa", "koden"]):
+                return "Kunde inte hantera git-kommandot. Ange filnamn som 'git: explain app.py'"
+            
+            # Hitta index för sista .py-filen
+            py_index = None
+            for i, word in enumerate(words):
+                if word.endswith('.py'):
+                    py_index = i
+                    break
+            
+            if py_index is None:
+                # Om ingen .py-fil hittades, använd sista ordet
+                filename = words[-1]
+                if not filename.endswith('.py'):
+                    filename += '.py'
+            else:
+                # Använd .py-filen och eventuella ord före den som är del av filnamnet
+                filename_parts = []
+                i = py_index
+                while i >= 0 and not any(keyword in ' '.join(words[i:py_index+1]) for keyword in ["explain", "förklara", "visa filen", "visa koden", "förklara koden"]):
+                    filename_parts.insert(0, words[i])
+                    i -= 1
+                filename = ' '.join(filename_parts)
+            
+            self.logger.debug(f"Extraherade filnamn: {filename}")
             return await self.explain_file(filename)
-        elif "analyze commit" in task.lower():
-            commit_hash = task.replace("analyze commit", "").strip()
+        elif "analyze commit" in task.lower() or "analysera commit" in task.lower():
+            # Kontrollera om commit-hash saknas
+            commit_hash = task.replace("analyze commit", "").replace("analysera commit", "").strip()
+            if not commit_hash:
+                return "Kunde inte hantera git-kommandot. Ange commit-hash som 'git: analyze commit 98fc5b6'"
             return await self.analyze_commit(commit_hash)
         else:
-            return "Kunde inte hantera git-kommandot. Tillgängliga kommandon: explain, review PR #, analyze commit"
+            return "Kunde inte hantera git-kommandot. Tillgängliga kommandon:\n" + \
+                   "- explain/förklara [filnamn] - Förklarar en fil\n" + \
+                   "- review/granska PR #[nummer] - Granskar en pull request\n" + \
+                   "- analyze/analysera commit [hash] - Analyserar en commit"
 
     async def review_pull_request(self, task: str) -> str:
         """Granskar en pull request."""
