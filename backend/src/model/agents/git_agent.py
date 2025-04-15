@@ -96,20 +96,8 @@ class GitAgent(BaseAgent):
         task_lower = task.lower().strip()
 
         # Kontrollera först om det är en projektöversikt som efterfrågas
-        if any(keyword in task_lower for keyword in ["project overview", "visa översikt", "projektöversikt"]):
-            overview = await self.project_overview()
-            return {
-                "source": self.name,
-                "content": overview
-            }
-        # Kontrollera om det är trädstruktur som efterfrågas
-        elif any(keyword in task_lower for keyword in ["struktur", "structure", "tree"]):
-            if not self.file_index:
-                await self.initialize()
-            return {
-                "source": self.name,
-                "content": self._get_directory_structure()
-            }
+        if any(keyword in task_lower for keyword in ["project overview", "visa översikt", "projektöversikt", "struktur"]):
+            return await self.project_overview()
             
         if "explain" in task_lower or "förklara" in task_lower or "visa" in task_lower:
             return await self.handle_explain(task)
@@ -397,28 +385,41 @@ Var pedagogisk men teknisk i förklaringen."""
         prompt = f"Review and summarize this Git commit:\n\n{diff}"
         return self.llm.query(prompt)
 
-    async def project_overview(self):
-        """Ger en översikt över projektet baserat på filstrukturen."""
-        # Se till att vi har ett uppdaterat index
-        if not self.file_index:
-            await self.initialize()
+    async def project_overview(self) -> Dict[str, str]:
+        """Returnerar en översikt över projektstrukturen."""
+        try:
+            # Initiera om nödvändigt
+            if not hasattr(self, '_initialized'):
+                await self.initialize()
+                self._initialized = True
+
+            # Uppdatera GitHub-indexet med force_refresh
+            self.file_index = await self.github_indexer.index_repo(force_refresh=True)
             
-        structure = self._get_directory_structure()
-        prompt = f"""Detta är filstrukturen för kodbasen:
-
-{structure}
-
-Analysera och beskriv:
-1. Projektets huvudsyfte och struktur
-2. Viktiga komponenter och deras roller
-3. Hur de olika delarna hänger ihop
-4. Eventuella mönster i arkitekturen
-5. Rekommendationer för förbättringar
-
-Var pedagogisk men teknisk i förklaringen."""
-
-        response = await self.llm.query(prompt)
-        return response
+            if not self.file_index:
+                return {
+                    "source": self.name,
+                    "content": "Kunde inte hämta projektstrukturen. Försök igen senare."
+                }
+            
+            # Skapa en trädvy av projektstrukturen
+            tree = self._get_directory_structure(self.file_index)
+            if not tree:
+                return {
+                    "source": self.name,
+                    "content": "Kunde inte generera projektstrukturen. Försök igen senare."
+                }
+            
+            return {
+                "source": self.name,
+                "content": tree
+            }
+        except Exception as e:
+            logger.error(f"Fel vid hämtning av projektöversikt: {str(e)}")
+            return {
+                "source": self.name,
+                "content": f"Ett fel uppstod vid hämtning av projektöversikt: {str(e)}"
+            }
 
     def suggest_improvements(self):
         structure = self._get_directory_structure()
@@ -501,12 +502,12 @@ Var pedagogisk men teknisk i förklaringen."""
             return f"[GitAgent Error] Could not retrieve commit diff:\n{e.stderr or str(e)}"
 
 
-    def _get_directory_structure(self) -> str:
+    def _get_directory_structure(self, file_index: dict) -> str:
         """Skapar en trädvy av projektstrukturen från file_index."""
         try:
             # Skapa en trädstruktur från file_index
             structure = {}
-            for path in self.file_index.keys():
+            for path in file_index.keys():
                 # Hoppa över oönskade filer/kataloger
                 if any(skip in path for skip in ['.git', 'node_modules', '__pycache__', '.env']):
                     continue
