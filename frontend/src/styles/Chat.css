@@ -18,3 +18,20 @@
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   }
   
+  .file-link {
+    cursor: pointer;
+    text-decoration: none;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+    color: inherit;
+  }
+  
+  .file-link:hover {
+    color: aliceblue;
+  }
+  
+  .file-link:active {
+    opacity: 0.8;
+  }
+  

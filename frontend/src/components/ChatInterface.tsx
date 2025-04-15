@@ -77,13 +77,18 @@ export default function ChatInterface() {
   const getSourceColor = (source?: string) => {
     if (!source) return 'system-color';
     
-    switch (source.toLowerCase()) {
+    const sourceLower = source.toLowerCase();
+    switch (sourceLower) {
       case 'gitagent':
         return 'git-color';
       case 'researchagent':
         return 'research-color';
       case 'supervisor':
         return 'supervisor-color';
+      case 'user':
+        return 'user-color';
+      case 'error':
+        return 'error-color';
       default:
         return 'system-color';
     }
@@ -92,13 +97,18 @@ export default function ChatInterface() {
   const getSourceEmoji = (source?: string) => {
     if (!source) return '⚙️';
     
-    switch (source.toLowerCase()) {
+    const sourceLower = source.toLowerCase();
+    switch (sourceLower) {
       case 'gitagent':
         return '💻';
       case 'researchagent':
         return '🔍';
       case 'supervisor':
         return '👨‍💼';
+      case 'user':
+        return '👤';
+      case 'error':
+        return '⚠️';
       default:
         return '⚙️';
     }
@@ -114,51 +124,160 @@ export default function ChatInterface() {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!task.trim()) return
+    e.preventDefault();
+    if (!task.trim()) return;
 
-    // Lägg till användarens meddelande
-    setMessages(prev => [...prev, { content: task, source: "User", isUser: true }])
-    
-    // Kolla om det är ett hjälpkommando
-    const helpMessage = handleHelp(task);
-    if (helpMessage) {
-      setMessages(prev => [...prev, helpMessage]);
-      setTask("");
-      return;
-    }
-
-    setLoading(true)
-    setTask("") // Rensa input efter att meddelandet skickats
+    const userMessage: Message = {
+      content: task,
+      isUser: true,
+      source: "user"
+    };
+    setMessages(prev => [...prev, userMessage]);
+    setTask("");
+    setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/api/ask-supervisor`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      console.log("Sending request with task:", task);
+      const response = await fetch(`${API_BASE}/api/ask-supervisor`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ task }),
-      })
+      });
 
-      if (!res.ok) {
-        throw new Error(`Server returned ${res.status}`);
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}`);
       }
 
-      const data = await res.json()
+      const data = await response.json();
+      console.log("Received response:", data);
+      
+      // Hantera trädstruktur och gör filnamn klickbara
+      if (data.content) {
+        // Lista över vanliga filändelser
+        const fileExtensions = ['.tsx', '.ts', '.js', '.jsx', '.html', '.css', '.py', '.md', '.json', '.yml', '.yaml'];
+        
+        // Funktion för att göra filnamn klickbara
+        const makeFilesClickable = (text: string) => {
+          // Dela upp texten i rader
+          const lines = text.split('\n');
+          
+          // Processa varje rad
+          return lines.map(line => {
+            // Hitta filnamn med filändelser i raden
+            const fileMatch = line.match(/([^\/\s]+(\.tsx|\.ts|\.js|\.jsx|\.html|\.css|\.py|\.md|\.json|\.yml|\.yaml))/);
+            
+            if (fileMatch) {
+              const fileName = fileMatch[0];
+              // Hitta hela sökvägen till filen
+              const pathMatch = line.match(/([^│├└\s]+)\s*$/);
+              if (pathMatch) {
+                const fullPath = pathMatch[1].trim();
+                // Ersätt bara filnamnet med en länk
+                return line.replace(fileName, `<span class="file-link" data-command="git: explain ${fullPath}">${fileName}</span>`);
+              }
+            }
+            return line;
+          }).join('\n');
+        };
+
+        // Gör filnamn klickbara i svaret
+        const processedContent = makeFilesClickable(data.content);
+        
+        // Uppdatera medan vi behåller HTML-formateringen
+        setMessages(prev => [...prev, {
+          content: processedContent,
+          isUser: false,
+          source: data.source || "unknown"
+        }]);
+      } else {
+        setMessages(prev => [...prev, {
+          content: "Inget svar mottaget",
+          isUser: false,
+          source: data.source || "unknown"
+        }]);
+      }
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
       setMessages(prev => [...prev, {
-        content: data.content || 'Inget svar mottaget',
-        source: data.source || 'System'
-      }]);
-    } catch (err) {
-      console.error('Error in handleSubmit:', err);
-      setMessages(prev => [...prev, { 
-        content: err instanceof Error ? 
-          `Ett fel uppstod: ${err.message}` : 
-          'Ett okänt fel uppstod vid kommunikation med servern', 
-        source: "System" 
+        content: error instanceof Error ? 
+          `Ett fel uppstod: ${error.message}` : 
+          'Ett okänt fel uppstod vid kommunikation med servern',
+        isUser: false,
+        source: "error"
       }]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
+
+  // Lägg till useEffect för att hantera fil-länkar
+  useEffect(() => {
+    const handleFileClick = async (event: Event) => {
+      const target = event.currentTarget as HTMLElement;
+      const command = target.getAttribute('data-command');
+      if (command) {
+        // Lägg till system-meddelande
+        setMessages(prev => [...prev, {
+          content: `Kör kommandot: ${command}`,
+          source: 'system'
+        }]);
+
+        // Visa laddningsindikator
+        setLoading(true);
+
+        // Skicka kommandot direkt
+        try {
+          const response = await fetch(`${API_BASE}/api/ask-supervisor`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ task: command }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+          }
+
+          const data = await response.json();
+          
+          if (data.content) {
+            setMessages(prev => [...prev, {
+              content: data.content,
+              isUser: false,
+              source: data.source || "unknown"
+            }]);
+          }
+        } catch (error) {
+          console.error('Error in handleFileClick:', error);
+          setMessages(prev => [...prev, {
+            content: error instanceof Error ? 
+              `Ett fel uppstod: ${error.message}` : 
+              'Ett okänt fel uppstod vid kommunikation med servern',
+            isUser: false,
+            source: "error"
+          }]);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    // Lägg till event listeners för alla fil-länkar
+    const fileLinks = document.getElementsByClassName('file-link');
+    for (let i = 0; i < fileLinks.length; i++) {
+      fileLinks[i].addEventListener('click', handleFileClick);
+    }
+
+    // Städa upp event listeners när komponenten unmountas
+    return () => {
+      for (let i = 0; i < fileLinks.length; i++) {
+        fileLinks[i].removeEventListener('click', handleFileClick);
+      }
+    };
+  }, [messages]); // Kör useEffect när messages uppdateras
 
   return (
     <div className="chat-interface">
@@ -182,7 +301,10 @@ export default function ChatInterface() {
                 {getSourceEmoji(msg.source)} {msg.source}
               </p>
             )}
-            <p className="message-content">{msg.content}</p>
+            <div 
+              className="message-content"
+              dangerouslySetInnerHTML={{ __html: msg.content }}
+            />
           </div>
         ))}
         <div ref={messagesEndRef} />
