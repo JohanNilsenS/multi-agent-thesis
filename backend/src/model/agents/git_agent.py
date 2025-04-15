@@ -93,15 +93,33 @@ class GitAgent(BaseAgent):
             }
             
         # Hantera olika typer av kommandon
-        if "explain" in task.lower() or "förklara" in task.lower() or "visa" in task.lower():
+        task_lower = task.lower().strip()
+
+        # Kontrollera först om det är en projektöversikt som efterfrågas
+        if any(keyword in task_lower for keyword in ["project overview", "visa översikt", "projektöversikt"]):
+            overview = await self.project_overview()
+            return {
+                "source": self.name,
+                "content": overview
+            }
+        # Kontrollera om det är trädstruktur som efterfrågas
+        elif any(keyword in task_lower for keyword in ["struktur", "structure", "tree"]):
+            if not self.file_index:
+                await self.initialize()
+            return {
+                "source": self.name,
+                "content": self._get_directory_structure()
+            }
+            
+        if "explain" in task_lower or "förklara" in task_lower or "visa" in task_lower:
             return await self.handle_explain(task)
-        elif "review" in task.lower() or "granska" in task.lower():
+        elif "review" in task_lower or "granska" in task_lower:
             result = await self.review_pull_request(task)
             return {
                 "source": self.name,
                 "content": result
             }
-        elif "analyze" in task.lower() or "analysera" in task.lower():
+        elif "analyze" in task_lower or "analysera" in task_lower:
             result = await self.analyze_commit(task)
             return {
                 "source": self.name,
@@ -110,7 +128,7 @@ class GitAgent(BaseAgent):
         else:
             return {
                 "source": self.name,
-                "content": "Kunde inte hantera git-kommandot"
+                "content": "Kunde inte hantera git-kommandot. Prova 'git: help' för att se tillgängliga kommandon."
             }
 
     async def review_pull_request(self, task: str) -> dict:
@@ -379,10 +397,28 @@ Var pedagogisk men teknisk i förklaringen."""
         prompt = f"Review and summarize this Git commit:\n\n{diff}"
         return self.llm.query(prompt)
 
-    def project_overview(self):
+    async def project_overview(self):
+        """Ger en översikt över projektet baserat på filstrukturen."""
+        # Se till att vi har ett uppdaterat index
+        if not self.file_index:
+            await self.initialize()
+            
         structure = self._get_directory_structure()
-        prompt = f"This is the file structure of a codebase:\n\n{structure}\n\nWhat is this project likely doing?"
-        return self.llm.query(prompt)
+        prompt = f"""Detta är filstrukturen för kodbasen:
+
+{structure}
+
+Analysera och beskriv:
+1. Projektets huvudsyfte och struktur
+2. Viktiga komponenter och deras roller
+3. Hur de olika delarna hänger ihop
+4. Eventuella mönster i arkitekturen
+5. Rekommendationer för förbättringar
+
+Var pedagogisk men teknisk i förklaringen."""
+
+        response = await self.llm.query(prompt)
+        return response
 
     def suggest_improvements(self):
         structure = self._get_directory_structure()
@@ -466,14 +502,45 @@ Var pedagogisk men teknisk i förklaringen."""
 
 
     def _get_directory_structure(self) -> str:
-        output = []
-        for root, dirs, files in os.walk(self.repo_path):
-            depth = root.replace(self.repo_path, "").count(os.sep)
-            indent = "  " * depth
-            output.append(f"{indent}{os.path.basename(root)}/")
-            for f in files:
-                output.append(f"{indent}  {f}")
-        return "\n".join(output)
+        """Skapar en trädvy av projektstrukturen från file_index."""
+        try:
+            # Skapa en trädstruktur från file_index
+            structure = {}
+            for path in self.file_index.keys():
+                # Hoppa över oönskade filer/kataloger
+                if any(skip in path for skip in ['.git', 'node_modules', '__pycache__', '.env']):
+                    continue
+                    
+                parts = path.split('/')
+                current = structure
+                for i, part in enumerate(parts):
+                    if i == len(parts) - 1:  # Det är en fil
+                        current[part] = None
+                    else:  # Det är en katalog
+                        if part not in current:
+                            current[part] = {}
+                        current = current[part]
+            
+            # Konvertera strukturen till en sträng med fin formatering
+            output = []
+            
+            def add_to_output(node, prefix="", is_last=True):
+                items = sorted(node.items()) if isinstance(node, dict) else []
+                for i, (name, subtree) in enumerate(items):
+                    is_last_item = i == len(items) - 1
+                    if subtree is None:  # Det är en fil
+                        output.append(f"{prefix}{'└── ' if is_last_item else '├── '}📄 {name}")
+                    else:  # Det är en katalog
+                        output.append(f"{prefix}{'└── ' if is_last_item else '├── '}📁 {name}/")
+                        new_prefix = prefix + ('    ' if is_last_item else '│   ')
+                        add_to_output(subtree, new_prefix, is_last_item)
+            
+            add_to_output(structure)
+            return "\n".join(output) if output else "Ingen filstruktur hittades"
+
+        except Exception as e:
+            self.logger.error(f"Fel vid generering av katalogstruktur: {str(e)}")
+            return "Kunde inte generera projektstruktur"
 
     async def analyze_commit(self, commit_hash: str) -> str:
         """Analyserar en specifik commit."""
