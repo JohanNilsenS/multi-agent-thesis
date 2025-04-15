@@ -1,69 +1,95 @@
 # test_supervisor.py
 from src.model.supervisor import SupervisorAgent
 from src.model.tools.internet_search import search_duckduckgo
+import unittest
+import os
+import asyncio
+from src.model.llm_client import LLMClient
+import pytest
+from dotenv import load_dotenv
+from unittest.mock import AsyncMock, MagicMock, patch
+import json
 
-test_research = True
-test_git = True
-internet_search = True
-def main():
-    supervisor = SupervisorAgent()
-    import os
-    os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+# Ladda miljövariabler
+load_dotenv()
 
-    # After creating the supervisor and running a task
-    git_agent = next(agent for agent in supervisor.agents if agent.name == "GitAgent")
-    git_agent.print_file_index_preview()
+class TestSupervisorAgent(unittest.TestCase):
+    def setUp(self):
+        self.llm = LLMClient()
+        self.supervisor = SupervisorAgent(self.llm)
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
 
-    if test_research:
-        task = "research why flamingos are pink"
-        result = supervisor.delegate(task)
+    def tearDown(self):
+        self.loop.close()
 
-        print(f"Task Source: {result['source']}")
-        print("Content:")
-        print(result['content'])
+    def run_async_test(self, coro):
+        """Kör en asynkron testfunktion."""
+        return self.loop.run_until_complete(coro)
 
-        print("\n--- Running same task again to test DB retrieval ---\n")
-        result = supervisor.delegate(task)
-        print(f"Task Source: {result['source']}")
-        print("Content:")
-        print(result['content'])
+    def test_delegate_to_git_agent(self):
+        """Testar att uppgifter delegeras till GitAgent."""
+        async def test():
+            test_cases = [
+                "git: explain app.py",
+                "git: förklara koden i app.py",
+                "visa filen app.py",
+                "git: review PR #3",
+                "git: analyze commit 98fc5b6"
+            ]
+            
+            for task in test_cases:
+                result = await self.supervisor.delegate(task)
+                self.assertEqual(result['source'], 'GitAgent', f"Task '{task}' should be delegated to GitAgent")
 
+        self.run_async_test(test())
 
-    if test_git:
-        print("\n--- Git Commit Summary ---\n")
-        result = supervisor.delegate("git summary")
-        print(result)
+    def test_delegate_to_research_agent(self):
+        """Testar att uppgifter delegeras till ResearchAgent."""
+        async def test():
+            test_cases = [
+                "research: vad är python?",
+                "research: förklara machine learning",
+                "sök information om AI",
+                "hitta information om python",
+                "vad är artificiell intelligens?"
+            ]
+            
+            for task in test_cases:
+                result = await self.supervisor.delegate(task)
+                self.assertEqual(result['source'], 'ResearchAgent', f"Task '{task}' should be delegated to ResearchAgent")
 
-        print("\n--- Project Overview ---\n")
-        result = supervisor.delegate("project overview")
-        print(result)
+        self.run_async_test(test())
 
-        print("\n--- Suggestions ---\n")
-        result = supervisor.delegate("suggest improvement")
-        print(result)
+    def test_error_handling(self):
+        """Testar felhantering för olika scenarion."""
+        async def test():
+            test_cases = [
+                ("", "Kunde inte hantera uppgiften"),
+                ("   ", "Kunde inte hantera uppgiften"),
+                ("invalid command", "Kunde inte hantera uppgiften")
+            ]
+            
+            for task, expected_error in test_cases:
+                result = await self.supervisor.delegate(task)
+                self.assertIn(expected_error, result['content'])
 
-        print("\n--- Explain Function: process_invoice ---\n")
-        git_agent.reindex_files()
-        explanation = git_agent.explain_function("explain_function")
-        print(explanation)
+        self.run_async_test(test())
 
-        print("\n--- All Indexed Functions ---\n")
-        for func in git_agent.list_all_functions():
-            print(f"{func['name']}  ➜  {func['path']}")
+    def test_combined_commands(self):
+        """Testar kombinerade kommandon."""
+        async def test():
+            test_cases = [
+                "git: explain app.py and research: what is python",
+                "research: python and git: explain app.py"
+            ]
+            
+            for task in test_cases:
+                result = await self.supervisor.delegate(task)
+                # Kontrollera att minst en agent kunde hantera uppgiften
+                self.assertTrue(result['source'] in ['GitAgent', 'ResearchAgent'])
 
-    if internet_search:
-        queries = [
-            "research how to build a supervisor agent system in python",
-            "research why the world is round"
-        ]
+        self.run_async_test(test())
 
-        for query in queries:
-            print(f"\n--- Research: {query} ---")
-            result = supervisor.delegate(query)
-            print(f"Source: {result['source']}")
-            print(f"Content:\n{result['content']}")
-
-
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    unittest.main()

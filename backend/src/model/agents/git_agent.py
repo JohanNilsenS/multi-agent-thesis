@@ -19,7 +19,10 @@ import logging
 
 class GitAgent(BaseAgent):
     def __init__(self, llm: LLMClient):
-        super().__init__(llm)
+        super().__init__("GitAgent")
+        self.llm = llm
+        self.debug = True
+        self.name = "GitAgent"
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         if not self.logger.handlers:
@@ -33,7 +36,6 @@ class GitAgent(BaseAgent):
         self.repo_owner = os.getenv("GITHUB_REPO_OWNER")
         self.github_indexer = create_github_indexer()
         self.file_index = {}
-        self.debug = True
 
     def log(self, message: str):
         if self.debug:
@@ -69,69 +71,49 @@ class GitAgent(BaseAgent):
         task_lower = task.lower()
         return any(keyword in task_lower for keyword in git_keywords)
 
-    async def handle(self, task: str) -> str:
-        """Hanterar en uppgift."""
-        self.logger.info(f"Hanterar git-uppgift: {task}")
+    async def handle(self, task: str) -> dict:
+        """Hanterar en uppgift asynkront."""
+        self.log(f"Handling task: {task}")
         
+        # Initiera om nödvändigt
+        if not hasattr(self, '_initialized'):
+            await self.initialize()
+            self._initialized = True
+            
         # Ta bort git: prefix om det finns
-        if task.lower().startswith("git:"):
+        if task.startswith("git:"):
             task = task[4:].strip()
-            self.logger.debug(f"Removed git: prefix. New task: {task}")
-
-        # Kontrollera om kommandot är tomt
+            self.log(f"Removed git: prefix, new task: {task}")
+            
+        # Kontrollera om kommandot är tomt efter att prefixet tagits bort
         if not task:
-            return "Kunde inte hantera git-kommandot. Ange ett kommando."
-
+            return {
+                "source": self.name,
+                "content": "Kunde inte hantera git-kommandot. Ange ett kommando som 'git: explain app.py'"
+            }
+            
         # Hantera olika typer av kommandon
-        if "pull request" in task.lower() or "pr" in task.lower():
-            # Kontrollera om PR-nummer saknas
-            if "#" not in task and "pr" not in task.lower():
-                return "Kunde inte hantera git-kommandot. Ange PR-nummer som 'git: review PR #3'"
-            return await self.review_pull_request(task)
-        elif any(keyword in task.lower() for keyword in ["explain", "förklara", "visa filen", "visa koden", "förklara koden"]):
-            # Extrahera filnamnet från uppgiften
-            words = task.lower().split()
-            
-            # Kontrollera om kommandot saknar filnamn
-            if len(words) == 1 and any(keyword in words[0] for keyword in ["explain", "förklara", "visa", "koden"]):
-                return "Kunde inte hantera git-kommandot. Ange filnamn som 'git: explain app.py'"
-            
-            # Hitta index för sista .py-filen
-            py_index = None
-            for i, word in enumerate(words):
-                if word.endswith('.py'):
-                    py_index = i
-                    break
-            
-            if py_index is None:
-                # Om ingen .py-fil hittades, använd sista ordet
-                filename = words[-1]
-                if not filename.endswith('.py'):
-                    filename += '.py'
-            else:
-                # Använd .py-filen och eventuella ord före den som är del av filnamnet
-                filename_parts = []
-                i = py_index
-                while i >= 0 and not any(keyword in ' '.join(words[i:py_index+1]) for keyword in ["explain", "förklara", "visa filen", "visa koden", "förklara koden"]):
-                    filename_parts.insert(0, words[i])
-                    i -= 1
-                filename = ' '.join(filename_parts)
-            
-            self.logger.debug(f"Extraherade filnamn: {filename}")
-            return await self.explain_file(filename)
-        elif "analyze commit" in task.lower() or "analysera commit" in task.lower():
-            # Kontrollera om commit-hash saknas
-            commit_hash = task.replace("analyze commit", "").replace("analysera commit", "").strip()
-            if not commit_hash:
-                return "Kunde inte hantera git-kommandot. Ange commit-hash som 'git: analyze commit 98fc5b6'"
-            return await self.analyze_commit(commit_hash)
+        if "explain" in task.lower() or "förklara" in task.lower() or "visa" in task.lower():
+            return await self.handle_explain(task)
+        elif "review" in task.lower() or "granska" in task.lower():
+            result = await self.review_pull_request(task)
+            return {
+                "source": self.name,
+                "content": result
+            }
+        elif "analyze" in task.lower() or "analysera" in task.lower():
+            result = await self.analyze_commit(task)
+            return {
+                "source": self.name,
+                "content": result
+            }
         else:
-            return "Kunde inte hantera git-kommandot. Tillgängliga kommandon:\n" + \
-                   "- explain/förklara [filnamn] - Förklarar en fil\n" + \
-                   "- review/granska PR #[nummer] - Granskar en pull request\n" + \
-                   "- analyze/analysera commit [hash] - Analyserar en commit"
+            return {
+                "source": self.name,
+                "content": "Kunde inte hantera git-kommandot"
+            }
 
-    async def review_pull_request(self, task: str) -> str:
+    async def review_pull_request(self, task: str) -> dict:
         """Granskar en pull request."""
         self.logger.info("Starting pull request review...")
         
@@ -145,7 +127,10 @@ class GitAgent(BaseAgent):
                 pr_number = parts[1].strip()
         
         if not pr_number:
-            return "Kunde inte hitta pull request-nummer. Ange PR-nummer som 'git: review PR #3'"
+            return {
+                "source": self.name,
+                "content": "Kunde inte hitta pull request-nummer. Ange PR-nummer som 'git: review PR #3'"
+            }
         
         self.logger.info(f"Reviewing PR #{pr_number}")
         
@@ -161,7 +146,10 @@ class GitAgent(BaseAgent):
             async with session.get(pr_url, headers=headers) as response:
                 if response.status != 200:
                     self.logger.error(f"Kunde inte hämta pull request #{pr_number}. Status: {response.status}")
-                    return f"Kunde inte hämta pull request #{pr_number}"
+                    return {
+                        "source": self.name,
+                        "content": f"Kunde inte hämta pull request #{pr_number}"
+                    }
                 
                 pr_data = await response.json()
                 
@@ -170,7 +158,10 @@ class GitAgent(BaseAgent):
             async with session.get(files_url, headers=headers) as response:
                 if response.status != 200:
                     self.logger.error(f"Kunde inte hämta ändringar för PR #{pr_number}. Status: {response.status}")
-                    return f"Kunde inte hämta ändringar för PR #{pr_number}"
+                    return {
+                        "source": self.name,
+                        "content": f"Kunde inte hämta ändringar för PR #{pr_number}"
+                    }
                 
                 files_data = await response.json()
         
@@ -216,14 +207,82 @@ Var specifik och hänvisa till specifika rader eller filer där det är relevant
                 async with session.post(comments_url, headers=headers, json=review_payload) as response:
                     if response.status == 200:
                         self.logger.info("Successfully posted review to GitHub")
-                        return f"Granskning postad till PR #{pr_number}:\n\n{review_text}"
+                        return {
+                            "source": self.name,
+                            "content": f"Granskning postad till PR #{pr_number}:\n\n{review_text}"
+                        }
                     else:
                         error_text = await response.text()
                         self.logger.error(f"Failed to post review to GitHub. Status: {response.status}, Error: {error_text}")
-                        return f"Kunde inte posta granskningen till GitHub. Status: {response.status}\n\nGranskningstext:\n{review_text}"
+                        return {
+                            "source": self.name,
+                            "content": f"Kunde inte posta granskningen till GitHub. Status: {response.status}\n\nGranskningstext:\n{review_text}"
+                        }
         except Exception as e:
             self.logger.error(f"Error posting review to GitHub: {str(e)}")
-            return f"Ett fel uppstod vid postning av granskningen till GitHub: {str(e)}\n\nGranskningstext:\n{review_text}"
+            return {
+                "source": self.name,
+                "content": f"Ett fel uppstod vid postning av granskningen till GitHub: {str(e)}\n\nGranskningstext:\n{review_text}"
+            }
+
+    async def handle_explain(self, task: str) -> dict:
+        """Hanterar förklaringskommandon."""
+        self.log(f"Handling explain command: {task}")
+        
+        # Extrahera filnamnet från uppgiften
+        filename = None
+        if "explain" in task.lower():
+            filename = task.split("explain")[-1].strip()
+        elif "förklara" in task.lower():
+            filename = task.split("förklara")[-1].strip()
+        elif "visa" in task.lower():
+            filename = task.split("visa")[-1].strip()
+            
+        if not filename:
+            return {
+                "source": self.name,
+                "content": "Kunde inte hitta filnamn i kommandot. Ange ett filnamn att förklara."
+            }
+            
+        # Hitta filen i indexet
+        file_content = None
+        for path, content in self.file_index.items():
+            if filename in path:
+                file_content = content
+                break
+                
+        if not file_content:
+            return {
+                "source": self.name,
+                "content": f"Kunde inte hitta filen {filename}"
+            }
+            
+        # Skapa en prompt för LLM
+        prompt = f"""
+        Förklara följande kodfil:
+        
+        Fil: {filename}
+        Innehåll:
+        {file_content}
+        
+        Förklaringen ska innehålla:
+        1. Filens huvudsyfte och funktion
+        2. Viktiga klasser och funktioner
+        3. Hur den interagerar med andra delar av systemet
+        4. Eventuella beroenden eller kopplingar
+        5. Viktiga säkerhetsaspekter eller prestandaöverväganden
+        
+        Var pedagogisk men teknisk i förklaringen.
+        """
+        
+        self.log("Sending explain prompt to LLM...")
+        response = await self.llm.query(prompt)
+        self.log("Got response from LLM")
+        
+        return {
+            "source": self.name,
+            "content": response
+        }
 
     async def explain_file(self, filename: str) -> str:
         """Förklarar innehållet i en fil och dess kopplingar till andra filer."""
@@ -544,3 +603,40 @@ Var teknisk och specifik i analysen."""
         
         self.logger.debug(f"Hittade {len(relevant_files)} relevanta filer")
         return relevant_files
+
+    async def handle_analyze(self, task: str) -> str:
+        """Analyserar kod i repositoryt."""
+        self.logger.info(f"Analyserar kod för uppgift: {task}")
+        
+        # Hitta relevanta filer baserat på uppgiften
+        relevant_files = self._find_relevant_files(task)
+        if not relevant_files:
+            self.logger.warning("Inga relevanta filer hittades för analys")
+            return "Kunde inte hitta relevanta filer att analysera."
+
+        self.logger.info(f"Hittade {len(relevant_files)} relevanta filer för analys")
+
+        # Skapa en sammanfattning av filerna
+        files_summary = "\n\n".join([
+            f"=== {path} ===\n{self._get_file_summary(content)}"
+            for path, content in relevant_files.items()
+        ])
+
+        # Skapa prompt för LLM
+        prompt = f"""Analysera följande kod:
+
+{files_summary}
+
+Analysen ska innehålla:
+1. Översikt av koden och dess struktur
+2. Identifierade mönster och arkitektur
+3. Potentiella förbättringar och optimeringar
+4. Eventuella buggar eller säkerhetsproblem
+5. Rekommendationer för vidareutveckling
+
+Var teknisk och specifik i analysen."""
+
+        self.logger.info("Skickar analysprompt till LLM")
+        response = await self.llm.query(prompt)
+        self.logger.info("Fick analyssvar från LLM")
+        return response
