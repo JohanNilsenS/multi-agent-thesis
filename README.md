@@ -22,51 +22,38 @@ Ett system för att hantera och automatisera olika typer av uppgifter med hjälp
   - [x] Kan hantera flera agenter samtidigt
 
 ### 2. Databasintegration
-- [ ] MongoDB-anslutning
+- [x] MongoDB-anslutning
   - [x] Anslutning till lokal MongoDB
-  - [ ] Grundläggande CRUD-operationer
-  - [ ] Felhantering och återanslutning
+  - [x] Grundläggande CRUD-operationer
+  - [x] Felhantering och återanslutning
 
-- [ ] Datamodeller
-  - [ ] Modell för kodfragment
-  - [ ] Modell för sökresultat
-  - [ ] Modell för agent-historik
+- [x] Datamodeller
+  - [x] Modell för kodfragment
+  - [x] Modell för sökresultat
+  - [x] Modell för agent-historik
 
 ### 3. Frontend
-- [ ] Användargränssnitt
-  - [ ] Responsiv design
-  - [ ] Tydlig navigering
-  - [ ] Felhantering och feedback
+- [x] Användargränssnitt
+  - [x] Responsiv design (tillräcklig för projektets syfte)
+  - [x] Tydlig navigering
+  - [x] Felhantering och feedback
 
-- [ ] Funktioner
-  - [ ] Skicka frågor till agenter
-  - [ ] Visa resultat från agenter
-  - [ ] Hantera flera samtidiga frågor
+- [x] Funktioner
+  - [x] Skicka frågor till agenter
+  - [x] Visa resultat från agenter
+  - [x] Hantera flera samtidiga frågor
 
 ### 4. Dokumentation
-- [ ] Teknisk dokumentation
-  - [ ] Systemarkitektur
-  - [ ] API-dokumentation
-  - [ ] Installationsguide
+- [x] Teknisk dokumentation
+  - [x] Systemarkitektur
+  - [x] API-dokumentation
+  - [x] Installationsguide
 
-- [ ] Användardokumentation
-  - [ ] Kommandoguide
-  - [ ] Exempel på användning
-  - [ ] Felsökningsguide
+- [x] Användardokumentation
+  - [x] Kommandoguide
+  - [x] Exempel på användning
+  - [x] Felsökningsguide
 
-### 5. Testning
-- [ ] Enhetstester
-  - [ ] Test av agenter
-  - [ ] Test av databasoperationer
-  - [ ] Test av API-endpoints
-
-- [ ] Integrationstester
-  - [ ] Test av agent-samverkan
-  - [ ] Test av frontend-backend-integration
-
-- [ ] Skalbarhet
-  - [ ] Caching av resultat
-  - [ ] Asynkron bearbetning
 
 ## Krav
 
