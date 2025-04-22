@@ -95,6 +95,37 @@ class GitAgent(BaseAgent):
         # Hantera olika typer av kommandon
         task_lower = task.lower().strip()
 
+        # Kontrollera först om det är help-kommando
+        if task_lower == "help":
+            return {
+                "source": self.name,
+                "content": """Här är vad jag kan hjälpa dig med:
+
+1. Förklara kod:
+   - git: explain [filnamn]
+   - git: förklara [filnamn]
+   - visa filen [filnamn]
+
+2. Granska Pull Requests:
+   - git: review PR #[nummer]
+   - git: granska PR #[nummer]
+
+3. Analysera Commits:
+   - git: analyze commit [hash]
+   - git: analysera commit [hash]
+
+4. Visa projektöversikt:
+   - git: project overview
+   - git: visa översikt
+   - git: projektöversikt
+   - git: struktur
+
+5. Kombinerade kommandon:
+   - git: explain [filnamn] and review PR #[nummer]
+
+Tips: Du kan skriva kommandona på både svenska och engelska!"""
+            }
+
         # Kontrollera först om det är en projektöversikt som efterfrågas
         if any(keyword in task_lower for keyword in ["project overview", "visa översikt", "projektöversikt", "struktur"]):
             return await self.project_overview()
