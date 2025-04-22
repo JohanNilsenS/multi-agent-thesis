@@ -114,6 +114,3 @@ GITHUB_REPO_NAME=ditt-repo-namn
 GITHUB_REPO_OWNER=ditt-github-användarnamn
 ```
 
-## Defination av Done (DaD)
-
-Features som ska fungera:
