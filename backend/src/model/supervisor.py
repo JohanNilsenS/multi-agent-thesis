@@ -34,7 +34,7 @@ class SupervisorAgent(BaseAgent):
         self.log(f"Checking if can handle task: {task}")
         return self.git_agent.can_handle(task) or self.research_agent.can_handle(task)
 
-    async def handle(self, task: str) -> str:
+    async def handle(self, task: str) -> dict:
         """Hanterar en uppgift genom att delegera till rätt agent."""
         self.log(f"Handling task: {task}")
         
@@ -43,16 +43,35 @@ class SupervisorAgent(BaseAgent):
             await self.initialize()
             self._initialized = True
         
-        # Bestäm vilken agent som ska hantera uppgiften
-        if self.git_agent.can_handle(task):
-            self.log("Delegating to GitAgent")
-            return await self.git_agent.handle(task)
-        elif self.research_agent.can_handle(task):
-            self.log("Delegating to ResearchAgent")
-            return await self.research_agent.handle(task)
+        # Säkerställ att task är en sträng
+        if not isinstance(task, str):
+            task = str(task)
+        
+        # Dela upp uppgiften i delar baserat på " and "
+        tasks = [t.strip() for t in task.split(" and ")]
+        results = []
+        
+        # Hantera varje uppgift
+        for task_part in tasks:
+            if self.git_agent.can_handle(task_part):
+                self.log(f"Delegating to GitAgent: {task_part}")
+                result = await self.git_agent.handle(task_part)
+                results.append(result)
+            elif self.research_agent.can_handle(task_part):
+                self.log(f"Delegating to ResearchAgent: {task_part}")
+                result = await self.research_agent.handle(task_part)
+                results.append(result)
+        
+        if results:
+            return {
+                "source": "supervisor",
+                "content": results
+            }
         else:
-            self.log("No suitable agent found")
-            return "Ingen lämplig agent hittades för att hantera denna uppgift."
+            return {
+                "source": "supervisor",
+                "content": "Ingen lämplig agent hittades för att hantera denna uppgift."
+            }
 
     def register_agent(self, agent: BaseAgent):
         self.agents[agent.name] = agent

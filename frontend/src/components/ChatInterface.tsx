@@ -155,42 +155,73 @@ export default function ChatInterface() {
       
       // Hantera trädstruktur och gör filnamn klickbara
       if (data.content) {
-        // Lista över vanliga filändelser
-        const fileExtensions = ['.tsx', '.ts', '.js', '.jsx', '.html', '.css', '.py', '.md', '.json', '.yml', '.yaml'];
-        
-        // Funktion för att göra filnamn klickbara
-        const makeFilesClickable = (text: string) => {
-          // Dela upp texten i rader
-          const lines = text.split('\n');
-          
-          // Processa varje rad
-          return lines.map(line => {
-            // Hitta filnamn med filändelser i raden
-            const fileMatch = line.match(/([^\/\s]+(\.tsx|\.ts|\.js|\.jsx|\.html|\.css|\.py|\.md|\.json|\.yml|\.yaml))/);
-            
-            if (fileMatch) {
-              const fileName = fileMatch[0];
-              // Hitta hela sökvägen till filen
-              const pathMatch = line.match(/([^│├└\s]+)\s*$/);
-              if (pathMatch) {
-                const fullPath = pathMatch[1].trim();
-                // Ersätt bara filnamnet med en länk
-                return line.replace(fileName, `<span class="file-link" data-command="git: explain ${fullPath}">${fileName}</span>`);
-              }
-            }
-            return line;
-          }).join('\n');
-        };
+        // Om content är en array, hantera varje resultat separat
+        if (Array.isArray(data.content)) {
+          data.content.forEach((result: any) => {
+            if (result.content) {
+              // Lista över vanliga filändelser
+              const fileExtensions = ['.tsx', '.ts', '.js', '.jsx', '.html', '.css', '.py', '.md', '.json', '.yml', '.yaml'];
+              
+              // Funktion för att göra filnamn klickbara
+              const makeFilesClickable = (text: string) => {
+                // Dela upp texten i rader
+                const lines = text.split('\n');
+                
+                // Processa varje rad
+                return lines.map(line => {
+                  // Hitta filnamn med filändelser i raden
+                  const fileMatch = line.match(/([^\/\s]+(\.tsx|\.ts|\.js|\.jsx|\.html|\.css|\.py|\.md|\.json|\.yml|\.yaml))/);
+                  
+                  if (fileMatch) {
+                    const fileName = fileMatch[0];
+                    // Hitta hela sökvägen till filen
+                    const pathMatch = line.match(/([^│├└\s]+)\s*$/);
+                    if (pathMatch) {
+                      const fullPath = pathMatch[1].trim();
+                      // Ersätt bara filnamnet med en länk
+                      return line.replace(fileName, `<span class="file-link" data-command="git: explain ${fullPath}">${fileName}</span>`);
+                    }
+                  }
+                  return line;
+                }).join('\n');
+              };
 
-        // Gör filnamn klickbara i svaret
-        const processedContent = makeFilesClickable(data.content);
-        
-        // Uppdatera medan vi behåller HTML-formateringen
-        setMessages(prev => [...prev, {
-          content: processedContent,
-          isUser: false,
-          source: data.source || "unknown"
-        }]);
+              // Gör filnamn klickbara i svaret
+              const processedContent = makeFilesClickable(result.content);
+              
+              // Uppdatera medan vi behåller HTML-formateringen
+              setMessages(prev => [...prev, {
+                content: processedContent,
+                isUser: false,
+                source: result.source || "unknown"
+              }]);
+            }
+          });
+        } else {
+          // Hantera enstaka svar som tidigare
+          const makeFilesClickable = (text: string) => {
+            const lines = text.split('\n');
+            return lines.map(line => {
+              const fileMatch = line.match(/([^\/\s]+(\.tsx|\.ts|\.js|\.jsx|\.html|\.css|\.py|\.md|\.json|\.yml|\.yaml))/);
+              if (fileMatch) {
+                const fileName = fileMatch[0];
+                const pathMatch = line.match(/([^│├└\s]+)\s*$/);
+                if (pathMatch) {
+                  const fullPath = pathMatch[1].trim();
+                  return line.replace(fileName, `<span class="file-link" data-command="git: explain ${fullPath}">${fileName}</span>`);
+                }
+              }
+              return line;
+            }).join('\n');
+          };
+
+          const processedContent = makeFilesClickable(data.content);
+          setMessages(prev => [...prev, {
+            content: processedContent,
+            isUser: false,
+            source: data.source || "unknown"
+          }]);
+        }
       } else {
         setMessages(prev => [...prev, {
           content: "Inget svar mottaget",
@@ -244,11 +275,60 @@ export default function ChatInterface() {
           const data = await response.json();
           
           if (data.content) {
-            setMessages(prev => [...prev, {
-              content: data.content,
-              isUser: false,
-              source: data.source || "unknown"
-            }]);
+            // Om content är en array, hantera varje resultat separat
+            if (Array.isArray(data.content)) {
+              data.content.forEach((result: any) => {
+                if (result.content) {
+                  // Gör filnamn klickbara i svaret
+                  const makeFilesClickable = (text: string) => {
+                    const lines = text.split('\n');
+                    return lines.map(line => {
+                      const fileMatch = line.match(/([^\/\s]+(\.tsx|\.ts|\.js|\.jsx|\.html|\.css|\.py|\.md|\.json|\.yml|\.yaml))/);
+                      if (fileMatch) {
+                        const fileName = fileMatch[0];
+                        const pathMatch = line.match(/([^│├└\s]+)\s*$/);
+                        if (pathMatch) {
+                          const fullPath = pathMatch[1].trim();
+                          return line.replace(fileName, `<span class="file-link" data-command="git: explain ${fullPath}">${fileName}</span>`);
+                        }
+                      }
+                      return line;
+                    }).join('\n');
+                  };
+
+                  const processedContent = makeFilesClickable(result.content);
+                  setMessages(prev => [...prev, {
+                    content: processedContent,
+                    isUser: false,
+                    source: result.source || "unknown"
+                  }]);
+                }
+              });
+            } else {
+              // Hantera enstaka svar
+              const makeFilesClickable = (text: string) => {
+                const lines = text.split('\n');
+                return lines.map(line => {
+                  const fileMatch = line.match(/([^\/\s]+(\.tsx|\.ts|\.js|\.jsx|\.html|\.css|\.py|\.md|\.json|\.yml|\.yaml))/);
+                  if (fileMatch) {
+                    const fileName = fileMatch[0];
+                    const pathMatch = line.match(/([^│├└\s]+)\s*$/);
+                    if (pathMatch) {
+                      const fullPath = pathMatch[1].trim();
+                      return line.replace(fileName, `<span class="file-link" data-command="git: explain ${fullPath}">${fileName}</span>`);
+                    }
+                  }
+                  return line;
+                }).join('\n');
+              };
+
+              const processedContent = makeFilesClickable(data.content);
+              setMessages(prev => [...prev, {
+                content: processedContent,
+                isUser: false,
+                source: data.source || "unknown"
+              }]);
+            }
           }
         } catch (error) {
           console.error('Error in handleFileClick:', error);
@@ -277,7 +357,7 @@ export default function ChatInterface() {
         fileLinks[i].removeEventListener('click', handleFileClick);
       }
     };
-  }, [messages]); // Kör useEffect när messages uppdateras
+  }, [messages]);
 
   return (
     <div className="chat-interface">
