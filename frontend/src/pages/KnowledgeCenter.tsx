@@ -97,6 +97,34 @@ const KnowledgeCenter: React.FC = () => {
         }
     };
 
+    const handleDeleteAll = async () => {
+        if (!window.confirm('Är du säker på att du vill ta bort all data? Detta går inte att ångra.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('http://localhost:5000/api/knowledge', {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                throw new Error('Kunde inte ta bort all data');
+            }
+
+            setKnowledgeList([]);
+            setUploadStatus({
+                isUploading: false,
+                success: 'All data har tagits bort'
+            });
+        } catch (error) {
+            console.error('Fel vid borttagning av all data:', error);
+            setUploadStatus({
+                isUploading: false,
+                error: 'Kunde inte ta bort all data'
+            });
+        }
+    };
+
     const handleUpdate = async (query: string, newContent: string) => {
         try {
             const response = await fetch(`http://localhost:5000/api/knowledge/${encodeURIComponent(query)}`, {
@@ -153,6 +181,16 @@ const KnowledgeCenter: React.FC = () => {
                         <button onClick={() => setUploadStatus({ isUploading: false })}>×</button>
                     </div>
                 )}
+            </div>
+
+            {/* Rensa all data knapp */}
+            <div className="clear-all-section">
+                <button 
+                    className="clear-all-button"
+                    onClick={handleDeleteAll}
+                >
+                    Rensa all data
+                </button>
             </div>
 
             {/* Lista över uppladdade dokument */}

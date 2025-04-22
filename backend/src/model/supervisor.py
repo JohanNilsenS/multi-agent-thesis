@@ -13,6 +13,10 @@ class SupervisorAgent(BaseAgent):
         self.llm = llm
         self.git_agent = GitAgent(llm)
         self.research_agent = ResearchAgent(llm)
+        self.agents = {
+            "GitAgent": self.git_agent,
+            "ResearchAgent": self.research_agent
+        }
         self.debug = True
 
     def log(self, message: str):
@@ -30,7 +34,7 @@ class SupervisorAgent(BaseAgent):
         self.log(f"Checking if can handle task: {task}")
         return self.git_agent.can_handle(task) or self.research_agent.can_handle(task)
 
-    async def handle(self, task: str) -> str:
+    async def handle(self, task: str) -> dict:
         """Hanterar en uppgift genom att delegera till rätt agent."""
         self.log(f"Handling task: {task}")
         
@@ -39,21 +43,40 @@ class SupervisorAgent(BaseAgent):
             await self.initialize()
             self._initialized = True
         
-        # Bestäm vilken agent som ska hantera uppgiften
-        if self.git_agent.can_handle(task):
-            self.log("Delegating to GitAgent")
-            return await self.git_agent.handle(task)
-        elif self.research_agent.can_handle(task):
-            self.log("Delegating to ResearchAgent")
-            return await self.research_agent.handle(task)
+        # Säkerställ att task är en sträng
+        if not isinstance(task, str):
+            task = str(task)
+        
+        # Dela upp uppgiften i delar baserat på " and "
+        tasks = [t.strip() for t in task.split(" and ")]
+        results = []
+        
+        # Hantera varje uppgift
+        for task_part in tasks:
+            if self.git_agent.can_handle(task_part):
+                self.log(f"Delegating to GitAgent: {task_part}")
+                result = await self.git_agent.handle(task_part)
+                results.append(result)
+            elif self.research_agent.can_handle(task_part):
+                self.log(f"Delegating to ResearchAgent: {task_part}")
+                result = await self.research_agent.handle(task_part)
+                results.append(result)
+        
+        if results:
+            return {
+                "source": "supervisor",
+                "content": results
+            }
         else:
-            self.log("No suitable agent found")
-            return "Ingen lämplig agent hittades för att hantera denna uppgift."
+            return {
+                "source": "supervisor",
+                "content": "Ingen lämplig agent hittades för att hantera denna uppgift."
+            }
 
     def register_agent(self, agent: BaseAgent):
         self.agents[agent.name] = agent
 
-    def decide_agent(self, task: str) -> BaseAgent | None:
+    async def decide_agent(self, task: str) -> BaseAgent | None:
         # Först kontrollera om någon agent kan hantera uppgiften direkt
         for agent in self.agents.values():
             if agent.can_handle(task):
@@ -80,22 +103,37 @@ class SupervisorAgent(BaseAgent):
         Svara endast med agentens namn: ResearchAgent eller GitAgent.
         """
         
-        decision = self.llm.query(prompt).strip()
+        decision = await self.llm.query(prompt)
         self.log(f"LLM routing decision: {decision}")
-        return self.agents.get(decision)
+        return self.agents.get(decision.strip())
 
-    def delegate(self, task: str, **kwargs):
+    async def delegate(self, task: str, **kwargs):
+        # Kontrollera om kommandot är tomt
+        if not task or not task.strip():
+            return {
+                "source": self.name,
+                "content": "Kunde inte hantera uppgiften. Ange ett giltigt kommando."
+            }
+
+        # Kontrollera om någon agent kan hantera uppgiften direkt
         for agent in self.agents.values():
             if agent.can_handle(task):
                 self.log(f"Delegating to {agent.name} via keyword match")
-                result = agent.handle(task, **kwargs)
+                result = await agent.handle(task, **kwargs)
                 return self._validate_semantic_match(task, result)
-        selected = self.decide_agent(task)
+                
+        # Om ingen agent kan hantera det direkt, använd LLM för routing
+        selected = await self.decide_agent(task)
         if selected:
             self.log(f"Delegating to {selected.name} via LLM decision")
-            result = selected.handle(task, **kwargs)
+            result = await selected.handle(task, **kwargs)
             return self._validate_semantic_match(task, result)
-        raise ValueError(f"No agent found to handle task: {task}")
+            
+        # Om ingen agent kunde hantera uppgiften
+        return {
+            "source": self.name,
+            "content": "Kunde inte hantera uppgiften. Ange ett giltigt kommando."
+        }
 
     def _validate_semantic_match(self, task: str, result):
         # Om resultatet inte är en dictionary, returnera det direkt.

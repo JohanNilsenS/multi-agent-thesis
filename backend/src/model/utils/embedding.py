@@ -1,18 +1,24 @@
 from transformers import AutoTokenizer, AutoModel
 import torch
+import asyncio
 
 # Load once
 tokenizer = AutoTokenizer.from_pretrained("KBLab/bert-base-swedish-cased")
 model = AutoModel.from_pretrained("KBLab/bert-base-swedish-cased")
 
-def get_embedding_from_llm(text: str) -> list[float]:
+async def get_embedding_from_llm(text: str) -> list[float]:
+    # Kör den synkrona beräkningen i en separat tråd
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _compute_embedding, text)
+
+def _compute_embedding(text: str) -> list[float]:
     inputs = tokenizer(
-    text,
-    return_tensors="pt",
-    truncation=True,
-    padding=True,
-    max_length=512
-)
+        text,
+        return_tensors="pt",
+        truncation=True,
+        padding=True,
+        max_length=512
+    )
 
     with torch.no_grad():
         outputs = model(**inputs)

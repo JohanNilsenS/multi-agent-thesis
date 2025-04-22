@@ -12,15 +12,14 @@ Ett system för att hantera och automatisera olika typer av uppgifter med hjälp
   - [x] Kan hitta relaterade filer (Buggy kolla över hur vi visar filerna så att llm'n får rätt fil att kolla på)
   - [x] Kan visa repository-struktur
 
-- [ ] ResearchAgent
-  - [ ] Kan söka på internet
-  - [ ] Kan sammanfatta sökresultat
-  - [ ] Kan filtrera relevant information
+- [x] ResearchAgent
+  - [x] Kan söka på internet
+  - [x] Kan sammanfatta sökresultat
+  - [x] Kan filtrera relevant information
 
-- [ ] SupervisorAgent
-  - [ ] Kan delegera uppgifter till rätt agent
-  - [ ] Kan hantera flera agenter samtidigt
-  - [ ] Kan sammanfatta resultat från olika agenter
+- [x] SupervisorAgent
+  - [x] Kan delegera uppgifter till rätt agent
+  - [x] Kan hantera flera agenter samtidigt
 
 ### 2. Databasintegration
 - [ ] MongoDB-anslutning

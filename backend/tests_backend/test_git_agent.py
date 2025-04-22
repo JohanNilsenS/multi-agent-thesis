@@ -140,13 +140,13 @@ async def test_explain_file(git_agent, mock_llm):
     for task in test_cases:
         result = await git_agent.handle(task)
         # Kontrollera antingen för filinnehåll eller felmeddelanden
-        assert any(msg in result for msg in [
+        assert any(msg in result["content"] for msg in [
             "def main():",
             "Kunde inte hitta filen",
             "Kunde inte hantera git-kommandot"
         ]), f"Failed for command: {task}"
         # Kontrollera bara query-anropet om vi faktiskt hittade filen
-        if "def main():" in result:
+        if "def main():" in result["content"]:
             mock_llm.query.assert_called()
         mock_llm.reset_mock()
 
@@ -162,8 +162,8 @@ async def test_review_pr(git_agent, mock_llm):
     
     for task in test_cases:
         result = await git_agent.handle(task)
-        assert "PR" in result or "Kunde inte hämta pull request" in result
-        if "Kunde inte hämta pull request" not in result:
+        assert "PR" in result["content"] or "Kunde inte hämta pull request" in result["content"]
+        if "Kunde inte hämta pull request" not in result["content"]:
             mock_llm.query.assert_called()
         mock_llm.reset_mock()
 
@@ -177,12 +177,12 @@ async def test_analyze_commit(git_agent, mock_llm):
     
     for task in test_cases:
         result = await git_agent.handle(task)
-        assert any(msg in result.lower() for msg in [
+        assert any(msg in result["content"].lower() for msg in [
             "commit",
             "kunde inte hitta commit",
             "kunde inte hantera git-kommandot"
         ])
-        if "kunde inte hantera git-kommandot" not in result.lower():
+        if "kunde inte hantera git-kommandot" not in result["content"].lower():
             mock_llm.query.assert_called()
         mock_llm.reset_mock()
 
@@ -200,7 +200,7 @@ async def test_error_handling(git_agent, mock_llm):
     
     for task, expected_error in test_cases:
         result = await git_agent.handle(task)
-        assert expected_error in result, f"Expected error '{expected_error}' not found in result: '{result}'"
+        assert expected_error in result["content"], f"Expected error '{expected_error}' not found in result: '{result}'"
         # Kontrollera att query inte anropas för ogiltiga kommandon
         if expected_error == "Kunde inte hantera git-kommandot":
             mock_llm.query.assert_not_called()
@@ -211,28 +211,44 @@ async def test_combined_commands(git_agent, mock_llm):
     """Testa kombinerade kommandon"""
     task = "git: explain app.py and review PR #3"
     result = await git_agent.handle(task)
-    assert "Kunde inte hantera git-kommandot" in result or "PR" in result
+    assert "Kunde inte hantera git-kommandot" in result["content"] or "PR" in result["content"]
 
 @pytest.mark.asyncio
 async def test_file_explanation_content(git_agent, mock_llm):
     """Testa att filförklaringar innehåller rätt information"""
     task = "git: explain app.py"
     result = await git_agent.handle(task)
-    assert "def main():" in result or "Kunde inte hitta filen" in result
+    assert "def main():" in result["content"] or "Kunde inte hitta filen" in result["content"]
 
 @pytest.mark.asyncio
 async def test_pr_review_content(git_agent, mock_llm):
     """Testa att PR-granskningar innehåller rätt information"""
     task = "git: review PR #3"
     result = await git_agent.handle(task)
-    assert "PR" in result or "Kunde inte hämta pull request" in result
+    assert "PR" in result["content"] or "Kunde inte hämta pull request" in result["content"]
 
 @pytest.mark.asyncio
 async def test_commit_analysis_content(git_agent, mock_llm):
     """Testa att commit-analyser innehåller rätt information"""
     task = "git: analyze commit 98fc5b6"
     result = await git_agent.handle(task)
-    assert "commit" in result.lower() or "Kunde inte hitta commit" in result
+    assert "commit" in result["content"].lower() or "Kunde inte hitta commit" in result["content"]
+
+@pytest.mark.asyncio
+async def test_review_pull_request(self, git_agent):
+    """Testar granskning av pull request."""
+    # Testa med PR-nummer
+    result = await git_agent.review_pull_request("review PR #1")
+    assert isinstance(result, str)
+    assert "PR #1" in result
+    
+    # Testa med ogiltigt PR-nummer
+    result = await git_agent.review_pull_request("review PR #999999")
+    assert "Kunde inte hämta pull request" in result
+    
+    # Testa utan PR-nummer
+    result = await git_agent.review_pull_request("review")
+    assert "Kunde inte hitta pull request-nummer" in result
 
 def test_github_token():
     """Testa att GitHub-token finns."""

@@ -14,13 +14,19 @@ def ask_supervisor():
     try:
         data = request.get_json() or {}
         task = data.get("task")
+        tasks = data.get("tasks", [])
         
-        if not task:
-            return jsonify({"error": "Missing task"}), 400
+        if not task and not tasks:
+            return jsonify({"error": "Missing task or tasks"}), 400
             
         # Kör asynkron kod i en event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        
+        # Om det finns tasks, kombinera dem med " and "
+        if tasks:
+            task = " and ".join(tasks)
+            
         response = loop.run_until_complete(supervisor.handle(task))
         loop.close()
         
